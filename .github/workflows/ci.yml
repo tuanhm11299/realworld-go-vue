@@ -73,7 +73,10 @@ jobs:
   conformance:
     name: RealWorld conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Measured: the Playwright suite takes ~9 minutes with --retries=0 (76 run,
+    # 63 skip), plus ~2 minutes of setup. 20 leaves roughly 2x headroom for a
+    # slower runner without letting a runaway job burn an hour.
+    timeout-minutes: 20
     # Red until the app is finished — that is the point. This job reports how
     # many upstream tests pass instead of failing the build, so CI stays useful
     # while you learn. Flip continue-on-error to false at M9.

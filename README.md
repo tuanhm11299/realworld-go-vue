@@ -8,7 +8,10 @@ harness and the CI pipeline are done; **the application is not**. What you get
 instead of a finished app is a precise, executable list of everything that is
 missing, taken from the upstream RealWorld conformance suites:
 
-- **139 Playwright tests** across 12 files — the frontend contract.
+- **139 Playwright tests** across 12 files — the frontend contract. In the
+  `fullstack` mode this repo runs (see `playwright.config.ts`), 76 of them
+  execute and 63 skip: those need a separately reachable API with seeded demo
+  users, which you unlock with a dev seeder in M8.
 - **13 Hurl files** covering every endpoint plus five files of error and
   authorization edge cases — the backend contract.
 
