@@ -17,6 +17,9 @@ SPECS="$ROOT/.specs"
 CLONE="$SPECS/realworld"
 
 mkdir -p "$SPECS"
+# web/public holds only gitignored, synced assets, so git does not create the
+# directory on a fresh clone and the cp below would fail.
+mkdir -p "$ROOT/web/public"
 
 if [ -d "$CLONE/.git" ]; then
   echo "==> Updating $CLONE"
