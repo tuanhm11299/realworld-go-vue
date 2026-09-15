@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -18,6 +18,7 @@ jobs:
   go:
     name: Go
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: api
@@ -52,6 +53,7 @@ jobs:
   web:
     name: Web
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: web
@@ -71,6 +73,7 @@ jobs:
   conformance:
     name: RealWorld conformance
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Red until the app is finished — that is the point. This job reports how
     # many upstream tests pass instead of failing the build, so CI stays useful
     # while you learn. Flip continue-on-error to false at M9.
@@ -172,7 +175,12 @@ jobs:
       - name: Frontend conformance (Playwright)
         run: |
           set +e
-          npx playwright test --reporter=list,html 2>&1 | tee pw.log
+          # --retries=0 until the app is finished. Upstream's config retries
+          # twice, which is right for absorbing flakes in a passing suite and
+          # pure waste here: a test failing because the feature does not exist
+          # yet fails again identically, at 3x the runtime. Drop this flag at M9,
+          # when a flake becomes the only reason a test can fail.
+          npx playwright test --retries=0 --reporter=list,html 2>&1 | tee pw.log
           set -e
           {
             echo "### Frontend conformance"
