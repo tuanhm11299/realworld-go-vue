@@ -1,0 +1,23 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    # sqlc reads your migrations as the schema — one source of truth, so a
+    # column you forgot to migrate is a compile error rather than a 3am page.
+    schema: "migrations"
+    queries: "internal/store/queries"
+    gen:
+      go:
+        package: "store"
+        out: "internal/store"
+        sql_package: "pgx/v5"
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_interface: true          # lets you fake the store in handler tests
+        emit_empty_slices: true       # [] instead of null for empty article lists
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type: "database/sql.NullTime"
