@@ -39,13 +39,28 @@ locally and in CI.
 
 | Tool | Version | Notes |
 |---|---|---|
-| Go | 1.24+ | |
+| Go | **1.25+** | `api/go.mod` requires it (pgx v5.11 does); 1.24 fails to build |
 | Node | 22+ | |
 | Docker | any recent | For Postgres; a local Postgres works too |
 | [Hurl](https://hurl.dev/docs/installation.html) | **8.0+** | Earlier versions cannot parse the suite's `isList` predicate |
 
 `make tools` installs the Go CLIs (goose, sqlc, golangci-lint, air). Hurl you
 install yourself — it is a Rust binary, not a Go one.
+
+### macOS
+
+```bash
+brew install go node hurl
+brew install --cask docker     # or OrbStack / Colima, both fine
+open -a Docker                 # Docker must be running before `make up`
+```
+
+Both container images are multi-arch, so Apple Silicon needs no special flags.
+
+One thing to watch: if you already run Postgres locally (Postgres.app, or
+`brew services start postgresql`), port 5432 is taken and `make up` will fail to
+bind. Either stop it, or set a different port in `.env` — and remember to change
+it in **both** places, `POSTGRES_PORT` and the port inside `DATABASE_URL`.
 
 ## Quickstart
 
