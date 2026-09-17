@@ -57,6 +57,15 @@ open -a Docker                 # Docker must be running before `make up`
 
 Both container images are multi-arch, so Apple Silicon needs no special flags.
 
+`make tools` installs the Go CLIs into `$(go env GOPATH)/bin`, which is not on a
+fresh macOS PATH. The Makefile adds it for you, so `make` targets work either
+way — but add it to your shell profile if you want to run `goose` or `sqlc`
+directly:
+
+```bash
+echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zprofile
+```
+
 One thing to watch: if you already run Postgres locally (Postgres.app, or
 `brew services start postgresql`), port 5432 is taken and `make up` will fail to
 bind. Either stop it, or set a different port in `.env` — and remember to change

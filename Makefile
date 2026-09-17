@@ -10,6 +10,11 @@ include .env
 export
 endif
 
+# `make tools` installs goose, sqlc, golangci-lint and air with `go install`,
+# which puts them in GOPATH/bin — not on a fresh macOS PATH. Add it here so the
+# targets below work without the user editing their shell profile first.
+export PATH := $(PATH):$(shell go env GOPATH 2>/dev/null)/bin
+
 DATABASE_URL ?= postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable
 PORT         ?= 8080
 API_DIR      := api
