@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conduit</title>
+
+    <!--
+      The RealWorld frontend spec requires the shared Conduit stylesheet plus
+      its fonts and icons, which the stylesheet deliberately does not bundle.
+      styles.css is copied into public/ by `make specs-sync` — if this page looks
+      unstyled, that is the command you forgot.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css?family=Titillium+Web:700|Source+Sans+Pro:400,300,600,700|Lora:400,700"
+    />
+    <link
+      rel="stylesheet"
+      href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

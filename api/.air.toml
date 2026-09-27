@@ -1,0 +1,14 @@
+# Live reload for `make api-watch`.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/api ./cmd/api"
+  bin = "./tmp/api"
+  include_ext = ["go", "sql"]
+  exclude_dir = ["tmp", "bin", "migrations"]
+  delay = 200
+  stop_on_error = true
+
+[misc]
+  clean_on_exit = true

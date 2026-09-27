@@ -1,0 +1,33 @@
+# Local development dependencies. The Go API and the Vue dev server run on the
+# host (`make dev`) so you keep fast rebuilds and a debugger; only stateful
+# infrastructure lives in containers.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: conduit-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-conduit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-conduit}
+      POSTGRES_DB: ${POSTGRES_DB:-conduit}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # `make up` blocks until this passes, so migrations never race the server.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-conduit} -d ${POSTGRES_DB:-conduit}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  adminer:
+    image: adminer:5
+    container_name: conduit-adminer
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

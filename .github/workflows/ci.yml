@@ -1,0 +1,204 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  HURL_VERSION: "8.0.0"   # isList and friends need >= 8
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Install exactly what api/go.mod asks for. Pinning a version here
+          # instead lets the two drift, and a go.mod newer than the pin makes
+          # GOTOOLCHAIN fetch the trimmed module toolchain, whose tool set is
+          # incomplete (no covdata, pprof, trace...).
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on:"; echo "$unformatted"; exit 1
+          fi
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: api
+      - run: go test -race ./...
+      # TODO(Stage A of docs/roadmap.md): once you have tests worth defending,
+      # switch this to `go test -race -coverprofile=coverage.out ./...` and add a
+      # coverage floor. A gate you set before writing tests just teaches you to
+      # write bad ones, so there is nothing to measure yet.
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run build
+
+  conformance:
+    name: RealWorld conformance
+    runs-on: ubuntu-latest
+    # Measured: the Playwright suite takes ~9 minutes with --retries=0 (76 run,
+    # 63 skip), plus ~2 minutes of setup. 20 leaves roughly 2x headroom for a
+    # slower runner without letting a runaway job burn an hour.
+    timeout-minutes: 20
+    # Red until the app is finished — that is the point. This job reports how
+    # many upstream tests pass instead of failing the build, so CI stays useful
+    # while you learn. Flip continue-on-error to false at M9.
+    continue-on-error: true
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: conduit
+          POSTGRES_PASSWORD: conduit
+          POSTGRES_DB: conduit
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U conduit -d conduit"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable
+      PORT: "8080"
+      TEST_MODE: fullstack
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Install exactly what api/go.mod asks for. Pinning a version here
+          # instead lets the two drift, and a go.mod newer than the pin makes
+          # GOTOOLCHAIN fetch the trimmed module toolchain, whose tool set is
+          # incomplete (no covdata, pprof, trace...).
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Fetch upstream RealWorld specs
+        run: make specs-sync
+
+      - name: Install goose and migrate
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: make migrate-up
+
+      - name: Install Hurl
+        run: |
+          curl -fsSL -o hurl.tar.gz \
+            "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl-${HURL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          tar -xzf hurl.tar.gz
+          echo "$PWD/hurl-${HURL_VERSION}-x86_64-unknown-linux-gnu/bin" >> "$GITHUB_PATH"
+
+      - name: Start the API
+        run: |
+          cd api && go build -o bin/api ./cmd/api
+          # nohup + disown so the server outlives this step's shell.
+          nohup ./bin/api > /tmp/api.log 2>&1 &
+          echo $! > /tmp/api.pid
+          disown
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8080/healthz >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8080/healthz || { cat /tmp/api.log; exit 1; }
+
+      - name: API conformance (Hurl)
+        id: hurl
+        run: |
+          set +e
+          HOST=http://localhost:8080/api .specs/api/run-api-tests-hurl.sh 2>&1 | tee hurl.log
+          set -e
+          summary=$(grep -E 'Succeeded files|Failed files' hurl.log || echo "no summary")
+          {
+            echo "### Backend conformance"
+            echo '```'
+            echo "$summary"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop the API
+        # Playwright starts its own API + web server (reuseExistingServer is
+        # false in CI), so the one Hurl used must release :8080 first — and must
+        # have actually released it before Playwright tries to bind.
+        run: |
+          kill "$(cat /tmp/api.pid)" 2>/dev/null || true
+          for _ in $(seq 1 15); do
+            curl -fsS --max-time 1 http://localhost:8080/healthz >/dev/null 2>&1 || break
+            sleep 1
+          done
+
+      - name: Install dependencies for e2e
+        run: |
+          npm ci
+          npm --prefix web ci
+          npx playwright install --with-deps chromium
+
+      - name: Frontend conformance (Playwright)
+        run: |
+          set +e
+          # --retries=0 until the app is finished. Upstream's config retries
+          # twice, which is right for absorbing flakes in a passing suite and
+          # pure waste here: a test failing because the feature does not exist
+          # yet fails again identically, at 3x the runtime. Drop this flag at M9,
+          # when a flake becomes the only reason a test can fail.
+          npx playwright test --retries=0 --reporter=list,html 2>&1 | tee pw.log
+          set -e
+          {
+            echo "### Frontend conformance"
+            echo '```'
+            grep -E '^\s+[0-9]+ (passed|failed|skipped)' pw.log || tail -5 pw.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conformance-reports
+          path: |
+            hurl.log
+            pw.log
+            /tmp/api.log
+            playwright-report/
+          retention-days: 7

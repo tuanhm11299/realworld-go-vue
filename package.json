@@ -1,0 +1,14 @@
+{
+  "name": "realworld-go-vue-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Root harness: runs the upstream RealWorld Playwright suite against this stack. Application dependencies live in web/.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.0"
+  }
+}
